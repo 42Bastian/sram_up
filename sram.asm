@@ -8,12 +8,12 @@
 
 VERSION         equ "08"
 Baudrate        EQU 62500
-BRKuser         set 1
+;;->BRKuser         set 1
 DEBUG           set 1
 
 INFO_Y          EQU 40
 
-                include <macros\hardware.asm>            ; get hardware-names
+                include <includes\hardware.inc>            ; get hardware-names
 ****************
 * macros       *
                 include <macros\help.mac>
@@ -40,6 +40,7 @@ BlockCounter    ds 1
 p_puffer        ds 2
 check           ds 1
 retries         ds 1
+delayCount	ds 1
 VBLcount        ds 1
 seconds         ds 1
 state           ds 1
@@ -80,7 +81,7 @@ Start::         START_UP        ; Start-Label needed for reStart
                 stz $fdae
                 INITIRQ irq_vektoren
                 INITBRK
-;-->                SETIRQ 2,VBL
+                SETIRQ 2,VBL
                 SCRBASE screen0
                 SET_MINMAX 0,0,160,102
                 jsr InitCRC
@@ -115,7 +116,7 @@ ENDIF
 MAX_COMMAND     EQU 7
 sss:
                 cli
-clearScreen:
+clearScreen::
                 CLS #1
                 lda #CENTER_ADJUST
                 sta CurrAjust
@@ -136,6 +137,17 @@ clearScreen:
                 lda #LIGHTBLUE
                 sta FG_Color
 ;>                jsr _InitScreen
+
+        INITFONT LITTLEFNT
+	stz CurrX
+	stz CurrY
+	stz BlockCounter
+	jsr SelectBlock
+	ldx #0
+.1	lda $FCb2
+	jsr PrintHex
+	inx
+	bne .1
 
 CommandLoop::
 .1              stz state
@@ -173,69 +185,10 @@ commands
                 dc.w Clear1Block      ; "5" zero a block
                 dc.w ReadPuffer       ; "6" read last buffer
 
-check_flash::
-                jsr set5555
-                lda #$AA
-                sta $fcb3
+_CARD0 equ $FCB2
+_CARD1 equ $FCB3
 
-                jsr set2aaa
-                lda #$55
-                sta $fcb3
 
-                jsr set5555
-                lda #$90
-                sta $fcb3
-
-                ldy #250
-                ldx #0
-.4                dex
-                bne .4
-                dey
-                bne .4
-
-                lda #0
-                jsr SelectBlock
-
-                lda $fcb2
-                pha
-                lda $fcb2
-                jsr PrintHex
-                pla
-                jsr PrintHex
-                rts
-
-set2aaa::
-                lda #10
-                jsr SelectBlock
-
-                ldx #0
-                ldy #2
-.0                lda $fcb2
-                  dex
-                bne .0
-                dey
-                bne .0
-
-                ldx #170
-.1                lda $fcb2
-                  dex
-                bne .1
-                rts
-
-set5555::
-                lda #21
-                jsr SelectBlock
-
-                ldx #0
-.0                lda $fcb2
-                  dex
-                bne .0
-
-                ldx #85
-.1                lda $fcb2
-                  dex
-                bne .1
-                rts
 ****************
 * Hello
 ****************
@@ -250,7 +203,7 @@ SendCRCs::      stz BlockCounter
                 sta temp
                 lda #0
                 tay
-.1                eor $fcb2
+.1                eor _CARD0
                   tax
                   lda crctab,x
                   sty $fdae
@@ -367,7 +320,7 @@ ClearFlash::    stz BlockCounter
                 ldx #4
                 ldy #0
                 lda #$ff
-.1              sta $fcb3
+.1              sta _CARD1
                 inc $fdb0
                 iny
                 bne .1
@@ -378,84 +331,6 @@ ClearFlash::    stz BlockCounter
                 stz $fdb0
                 rts
 ****************
-*     SDP      *
-SDP::           lda #3
-                jsr SelectBlock ; address $1800
-                ldx #$23
-.0                lda $fcb3
-                  dex
-                bne .0
-                lda $fcb2       ; latch address : $1823
-
-                lda #3
-                jsr SelectBlock ; address $1800
-                ldx #$20
-.1                lda $fcb3
-                  dex
-                bne .1
-                lda $fcb2      ; latch address : $1820
-
-                lda #3
-                jsr SelectBlock ; address $1800
-                ldx #$22
-.2                lda $fcb3
-                  dex
-                bne .2
-                lda $fcb2      ; latch address : $1822
-
-                lda #0          ; address : $0000
-                jsr SelectBlock
-                ldx #0
-                ldy #4
-.3                lda $fcb3
-                  inx
-                  bne .3
-                  dey
-                bne .3
-                ldx #$18
-.4                lda $fcb3
-                  dex
-                bne .4
-                lda $fcb2       ; latch address : $418
-                                ; and increase address => $419
-
-                lda $fcb3       ; $41A
-                lda $fcb3       ; $41B
-                lda $fcb2       ; latch address : $41B
-
-                lda #0
-                jsr SelectBlock ; address $0000
-                ldx #0
-                ldy #4
-.5                lda $fcb3
-                  inx
-                  bne .5
-                  dey
-                bne .5
-                ldx #$19
-.6                lda $fcb3
-                  dex
-                bne .6
-                lda $fcb2       ; latch address : $419
-
-                lda #0
-                jsr SelectBlock ; address $0000
-                ldx #0
-                ldy #4
-.7                lda $fcb3
-                  inx
-                  bne .7
-                  dey
-                bne .7
-                ldx #$A
-.8                lda $fcb3
-                  dex
-                bne .8
-                lda $fcb2       ; latch address : $40A
-                                ; SDP is enabled
-
-                rts
-****************
 *  ClearBlock   *
 ****************
 ClearBlock::
@@ -463,7 +338,7 @@ ClearBlock::
                 ldy size
                 sty temp
                 ldy #0
-.1                  sta $fcb3
+.1                  sta _CARD1
                     sty $fdae
                     iny
                   bne .1
@@ -479,7 +354,7 @@ ReadBlock::
                 lda size
                 sta temp
                 ldy #0
-.1                  lda $fcb2
+.1                  lda _CARD0
                     jsr SendSerial
                     sty $fdae
                     iny
@@ -508,7 +383,7 @@ LoadBlock::
                   lda $fd8d
                   sta (p_puffer),y
                   sty $fdae
-                  sta $fcb3
+                  sta _CARD1
 
                   eor check
                   tax
@@ -556,7 +431,7 @@ WriteBlock::
                 stz check
                 ldy #0
 .1                lda puffer,y
-                  sta $fcb3
+                  sta _CARD1
                   eor check
                   tax
                   lda crctab,x
@@ -567,7 +442,7 @@ WriteBlock::
                 dec temp
                 beq .99
 .2                lda puffer+$100,y
-                  sta $fcb3
+                  sta _CARD1
                   eor check
                   tax
                   lda crctab,x
@@ -578,7 +453,7 @@ WriteBlock::
                 dec temp
                 beq .99
 .3                lda puffer+$200,y
-                  sta $fcb3
+                  sta _CARD1
                   eor check
                   tax
                   lda crctab,x
@@ -589,7 +464,7 @@ WriteBlock::
                 dec temp
                 beq .99
 .4                lda puffer+$300,y
-                  sta $fcb3
+                  sta _CARD1
                   eor check
                   tax
                   lda crctab,x
@@ -607,14 +482,14 @@ WriteBlock::
 CheckBlock::
                 ldx size
                 ldy #0
-.1                lda $fcb2
+.1                lda _CARD0
                   cmp puffer,y
                   bne .99
                   sty $fdae
                   iny
                 bne .1
                 dex
-.2                lda $fcb2
+.2                lda _CARD0
                   cmp puffer+$100,y
                   bne .99
                   sty $fdae
@@ -622,13 +497,13 @@ CheckBlock::
                 bne .2
                 dex
                 beq .98
-.3                lda $fcb2
+.3                lda _CARD0
                   cmp puffer+$200,y
                   bne .99
                   sty $fdae
                   iny
                 bne .3
-.4                lda $fcb2
+.4                lda _CARD0
                   cmp puffer+$300,y
                   bne .99
                   sty $fdae
@@ -647,7 +522,7 @@ CheckBlock::
 ;;->                sta temp
 ;;->                ldy #0
 ;;->                 tya
-;;->.1                  eor $fcb2
+;;->.1                  eor _CARD0
 ;;->                    tax
 ;;->                    lda crctab,x
 ;;->                    sty $fdae
@@ -739,55 +614,68 @@ _PrintHex::      phx
 digits          db "0123456789ABCDEF"
 ****************
 *     VBL      *
-VBL::           dec VBLcount
-                bpl .0
-                  lda #59
-                  sta VBLcount
-                  inc seconds
-.0              lda $fcb1
-                lsr
-                bcc .1
-                jmp Start
-;>                BREAKPOINT 3
-.1              END_IRQ
+VBL::
+	lda delayCount
+	beq .1
+	inc $fdb0
+	dec delayCount
+.1
+	dec VBLcount
+        bpl .2
+        lda #59
+        sta VBLcount
+        inc seconds
+.2
+//->	lda $fcb1
+//->        lsr
+//->        bcs .3
+	END_IRQ
+.3
+        jmp Start
+
 ****************
 *  SendSerial  *
-SendSerial::    bit $fd8c
-                bpl SendSerial
-                sta $fd8d       ; send byte
-.1              lda #$20
-                bit $fd8c
-                beq .1
-                lda $fd8d       ; get echo
-                rts
+SendSerial::
+	bit $fd8c
+        bpl SendSerial
+        sta $fd8d       ; send byte
+.1
+        lda #$20
+        bit $fd8c
+        beq .1
+        lda $fd8d       ; get echo
+
+        rts
 
 WaitSerial::
-                sec
-                inc $fda1
-                lda $fcb0       ; break it with any key
-                bne .99
-                bit $fd8c
-                bvc WaitSerial
-                lda $fd8d
-                clc
-.99             stz $fda1
-                rts
+        sec
+        inc $fda1
+        lda $fcb0       ; break it with any key
+        bne .99
+        bit $fd8c
+        bvc WaitSerial
+        lda $fd8d
+        clc
+.99
+        stz $fda1
+        rts
 
 WaitSerialDebug::
-                sec
-                inc $fda1
-                lda $fcb0       ; break it with any key
-                bne .99
-                bit $fd8c
-                bvc WaitSerialDebug
-                lda $fd8d
+        sec
+//->        inc $fda1
+        lda $fcb0       ; break it with any key
+        bne .99
+        bit $fd8c
+        bvc WaitSerialDebug
+        lda $fd8d
  IFD DEBUG
-                jsr do_debug
-                bcc WaitSerialDebug
+        jsr do_debug
+        bcc WaitSerialDebug
  ENDIF
-                clc
-.99             stz $fda1
-                rts
+        clc
+.99
+        stz $fda1
+        rts
 ****************
 * InitCRC      *
 ****************
@@ -807,6 +695,8 @@ InitCRC:
 ****************
 * Select a block
 ****************
+SelectBlockA::
+	sta	BlockCounter
 SelectBlock::
                 pha
                 phx
@@ -856,5 +746,5 @@ cls_color       dc.b 00
 
 cls_data        dc.b 2,$10,0
 
-size            dc.b 4          ; 1K blocks
+size            dc.b 8          ; 1K blocks
 pal             STANDARD_PAL
