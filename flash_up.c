@@ -184,7 +184,7 @@ void hexdump2(const char *left,const char * right)
 void sendByte(char c)
 {
   char dummy;
-  long n;
+  unsigned int n;
   WriteFile(hPort,&c,1,&n,NULL);
   if ( n ){
     do{
@@ -194,7 +194,7 @@ void sendByte(char c)
 }
 int getByte()
 {
-  long n;
+  unsigned int n;
   unsigned char c;
 //->  long tmo = 1;
 //->  do{
@@ -207,7 +207,7 @@ void sendLynxProgramm()
 {
   extern unsigned char sram_lynx[];
   int len;
-  long dwBytes;
+  unsigned int dwBytes;
   int rlen;
 
   len = sram_lynx[4]*256+sram_lynx[5];
@@ -266,7 +266,7 @@ void init_crctab()
 void getLynxCRC()
 {
   int i;
-  long n;
+  unsigned int n;
   sendByte('C');
   sendByte('0');
   i = 0;
@@ -279,7 +279,7 @@ void getLynxCRC()
 int checkBlock(int blk)
 {
   long len;
-  long n;
+  unsigned int n;
 
   sendByte('C');
   sendByte('4');
@@ -305,7 +305,7 @@ int clearBlock(int blk, int clear)
 int readBlock(int blk)
 {
   long len;
-  long n;
+  unsigned int n;
   len = 0;
 
   sendByte('C');
@@ -321,7 +321,7 @@ int readBlock(int blk)
 
 void sendBlock(int blk)
 {
-  long n;
+  unsigned int n;
   int c;
   long total;
 
@@ -386,7 +386,7 @@ typedef unsigned short UWORD;
 
 // Longs should be 32-bits wide
 typedef long SLONG;
-typedef unsigned long ULONG;
+//->typedef unsigned long ULONG;
 
 typedef struct
 {
@@ -447,6 +447,7 @@ int loadImage(const char *s)
 {
   FILE *in;
   int len;
+
   if ( (in = fopen(s,"rb")) == (FILE *)NULL){
     fprintf(stderr,"Couldn't open <%s>\n",s);
     return 1;
@@ -474,7 +475,7 @@ int loadImage(const char *s)
 void help(void)
 {
   fprintf(stderr,
-          "sram_up [-p com] [-b baudrate] [-s blocksize] [-l] [-x] (-e|[-r] file)\n"
+          "sram_up [-p com] [-b baudrate] [-s blocksize] [-l] [-x] [-e] (-r|-f) file)\n"
           " -x           : force writing\n"
           " -r file      : read card and save file with LNX header\n"
           " -e           : erase flash\n"
@@ -496,8 +497,8 @@ int main(int argc, char **argv)
   int force = 0;
   int sendLynx = 0;
   int clear = -1;
-  int needFileName = 0;
   int erase = 0;
+  char *filename;
   ++argv; // skip process-name
   --argc;
   if ( argc == 0 ){
@@ -522,11 +523,26 @@ int main(int argc, char **argv)
       argv += 1;
       argc -= 1;
       readCard = 1;
+      if ( argc != 0 && **argv != '-' ){
+        filename = *argv;
+        argv += 1;
+        argc -= 1;
+      } else {
+        fprintf(stderr,"Missing file\n");
+        return 1;
+      }
     } else if ( !strcmp(*argv,"-f")){
       argv += 1;
       argc -= 1;
       flashCard = 1;
-      needFileName = 1;
+        if ( argc != 0 && **argv != '-' ){
+        filename = *argv;
+        argv += 1;
+        argc -= 1;
+      } else {
+        fprintf(stderr,"Missing file\n");
+        return 1;
+      }
     } else if ( !strcmp(*argv,"-l")){
       argv += 1;
       argc -= 1;
@@ -549,21 +565,17 @@ int main(int argc, char **argv)
       fprintf(stderr,"Unknown option:%s\n",*argv);
       return 1;
     }
-  }  while ( argc > needFileName );
-  if ( needFileName && argc < 1 ){
-    fprintf(stderr,"Missing file\n");
-    return 1;
-  }
+  }  while ( argc > 0 );
 
   init_crctab();
 
   if ( readCard == 1 ){
-    if ( (fopen(argv[0],"rb")) != (FILE *)NULL){
-      fprintf(stderr,"Error, file exists <%s>\n",argv[0]);
+    if ( (fopen(filename,"rb")) != (FILE *)NULL){
+      fprintf(stderr,"Error, file exists <%s>\n",filename);
       return 1;
     }
   } else if ( flashCard ){
-    if ( loadImage(argv[0]) ){
+    if ( loadImage(filename) ){
       return 3;
     }
   }
@@ -593,7 +605,7 @@ int main(int argc, char **argv)
     for(i = 0; i < 256; ++i){
       readBlock(i);
     }
-    saveImage(argv[0]);
+    saveImage(filename);
   } else if ( flashCard ){
     printf("Image CRC...\n");
     getImageCRC();

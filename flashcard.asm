@@ -59,11 +59,15 @@ _TxtPtr          ds 2
 
  BEGIN_MEM
                 ALIGN 4
-screen0         ds SCREEN.LEN
+screen0
+	ds SCREEN.LEN
+
                 ALIGN 256
-puffer::        ds 2048
+puffer::
+	ds 2048
 crctab          ds 256
-irq_vektoren    ds 16
+irq_vektoren
+	ds 16
 
  END_MEM
                 run LOMEM       ; code directly after variables
@@ -518,7 +522,7 @@ Clear1Block::
 .99
         rts
 ****************
-* Clear1Block    *
+* EraseFlash   *
 ****************
 EraseFlash::
         jsr InfoErase
@@ -805,7 +809,6 @@ CheckBlock::
           sty $fdae
           iny
         bne .1
-
 .2        lda _CARD0
           cmp puffer+$100,y
           bne .99

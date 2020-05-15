@@ -22,10 +22,10 @@ int comm_setup(unsigned long Baudrate,
 unsigned int blocksize = 1024;
 HANDLE hPort = 0;
 
-unsigned char sectorBuffer[1024];
+unsigned char sectorBuffer[2048];
 unsigned char lynxcrc[256];
 unsigned char imagecrc[256];
-unsigned char buffer[256*1024];
+unsigned char buffer[256*2048];
 unsigned char crctab[256];
 
 void OSerror(char *f,long i);
@@ -184,7 +184,7 @@ void hexdump2(const char *left,const char * right)
 void sendByte(char c)
 {
   char dummy;
-  long n;
+  unsigned int n;
   WriteFile(hPort,&c,1,&n,NULL);
   if ( n ){
     do{
@@ -194,7 +194,7 @@ void sendByte(char c)
 }
 int getByte()
 {
-  long n;
+  unsigned int n;
   unsigned char c;
 //->  long tmo = 1;
 //->  do{
@@ -207,7 +207,7 @@ void sendLynxProgramm()
 {
   extern unsigned char sram_lynx[];
   int len;
-  long dwBytes;
+  unsigned int dwBytes;
   int rlen;
 
   len = sram_lynx[4]*256+sram_lynx[5];
@@ -266,7 +266,7 @@ void init_crctab()
 void getLynxCRC()
 {
   int i;
-  long n;
+  unsigned int n;
   sendByte('C');
   sendByte('0');
   i = 0;
@@ -279,17 +279,18 @@ void getLynxCRC()
 int checkBlock(int blk)
 {
   long len;
-  long n;
+  unsigned int n;
 
   sendByte('C');
   sendByte('4');
+  sendByte(blocksize/256);
   sendByte(blk);
 
   len = 0;
   do{
-    ReadFile(hPort,sectorBuffer,1024-len,&n,NULL);
+    ReadFile(hPort,sectorBuffer,blocksize-len,&n,NULL);
     len += n;
-  } while( len < 1024 );
+  } while( len < blocksize );
 
   return (memcmp(sectorBuffer, buffer+blk*blocksize, blocksize) == 0);
 }
@@ -311,27 +312,29 @@ int clearBlock(int blk, int clear)
 int readBlock(int blk)
 {
   long len;
-  long n;
+  unsigned int n;
   len = 0;
 
   sendByte('C');
   sendByte('4');
+  sendByte(blocksize/256);
   sendByte(blk);
 
   do{
-    ReadFile(hPort,buffer+blk*1024,1024-len,&n,NULL);
+    ReadFile(hPort,buffer+blk*blocksize,blocksize-len,&n,NULL);
     len += n;
-  } while( len < 1024 );
+  } while( len < blocksize );
 }
 
 void sendBlock(int blk)
 {
-  long n;
+  unsigned int n;
   int c;
   long total;
 
   sendByte('C');
   sendByte('1');
+  sendByte(blocksize/256);
   sendByte(blk);
   Sleep(25);
 
@@ -342,9 +345,9 @@ void sendBlock(int blk)
     }
     total = 0;
     do{
-      ReadFile(hPort,sectorBuffer,1024-total,&n,NULL);
+      ReadFile(hPort,sectorBuffer,blocksize-total,&n,NULL);
       total += n;
-    } while( total < 1024 );
+    } while( total < blocksize );
     sendByte(imagecrc[blk]);
     do{
       c = getByte();
@@ -400,7 +403,7 @@ typedef unsigned short UWORD;
 
 // Longs should be 32-bits wide
 typedef long SLONG;
-typedef unsigned long ULONG;
+//->typedef unsigned long ULONG;
 
 typedef struct
 {
@@ -461,6 +464,7 @@ int loadImage(const char *s)
 {
   FILE *in;
   int len;
+
   if ( (in = fopen(s,"rb")) == (FILE *)NULL){
     fprintf(stderr,"Couldn't open <%s>\n",s);
     return 1;
@@ -485,6 +489,16 @@ int loadImage(const char *s)
   return 0;
 }
 
+void help(void)
+{
+  fprintf(stderr,
+          "sram_up [-p com] [-b baudrate] [-s blocksize] [-l] [-x] (-r|-w) file)\n"
+          " -x           : force writing\n"
+          " -r file      : read card and save file with LNX header\n"
+          " -w file      : write card\n"
+          " -l           : force upload of loader\n");
+  exit(-1);
+}
 int main(int argc, char **argv)
 {
   long dwBytes;
@@ -499,9 +513,13 @@ int main(int argc, char **argv)
   int force = 0;
   int sendLynx = 0;
   int clear = -1;
-  int needFileName = 1;
+  char *filename;
   ++argv; // skip process-name
   --argc;
+  if ( argc == 0 ){
+    help();
+  }
+
   do{
     if ( !strcmp(*argv,"-b") ){
       baudrate = atoi(argv[1]);
@@ -516,15 +534,30 @@ int main(int argc, char **argv)
       clear = atoi(argv[1]);
       argv += 2;
       argc -= 2;
-      needFileName = 0;
     } else if ( !strcmp(*argv,"-r")){
       argv += 1;
       argc -= 1;
       readCard = 1;
-    } else if ( !strcmp(*argv,"-f")){
+      if ( argc != 0 && **argv != '-' ){
+        filename = *argv;
+        argv += 1;
+        argc -= 1;
+      } else {
+        fprintf(stderr,"Missing file\n");
+        return 1;
+      }
+    } else if ( !strcmp(*argv,"-w")){
       argv += 1;
       argc -= 1;
       flashCard = 1;
+      if ( argc != 0 && **argv != '-' ){
+        filename = *argv;
+        argv += 1;
+        argc -= 1;
+      } else {
+        fprintf(stderr,"Missing file\n");
+        return 1;
+      }
     } else if ( !strcmp(*argv,"-l")){
       argv += 1;
       argc -= 1;
@@ -533,33 +566,31 @@ int main(int argc, char **argv)
       argv += 1;
       argc -= 1;
       force = 1;
+    } else if ( !strcmp(*argv,"-s")){
+      blocksize = atoi(argv[1]);
+      argv += 2;
+      argc -= 2;
+      if ( blocksize != 512 && blocksize != 1024 && blocksize != 2048 ){
+        fprintf(stderr, "Wrong blocksize, must be 512,1024 or 2048\n");
+        return 1;
+      }
     } else if ( !strcmp(*argv,"-h")){
-      fprintf(stderr,
-              "sram_up [-p com] [-b baudrate] [-l] [-x] ([-c num]|[-r] file)|file\n"
-              " -x      : force writing\n"
-              " -r file : read card and save file with LNX header\n"
-              " -c num  : file card with num\n"
-              " -l      : force upload of loader\n");
-      exit(-1);
+      help();
     } else {
       fprintf(stderr,"Unknown option:%s\n",*argv);
       return 1;
     }
-  }  while ( argc > needFileName );
-  if ( needFileName && argc < 1 ){
-    fprintf(stderr,"Missing file\n");
-    return 1;
-  }
+  }  while ( argc >  0 );
 
   init_crctab();
 
   if ( readCard == 1 ){
-    if ( (fopen(argv[0],"rb")) != (FILE *)NULL){
-      fprintf(stderr,"Error, file exists <%s>\n",argv[0]);
+    if ( (fopen(filename,"rb")) != (FILE *)NULL){
+      fprintf(stderr,"Error, file exists <%s>\n",filename);
       return 1;
     }
   } else if ( clear == -1 ){
-    if ( loadImage(argv[0]) ){
+    if ( loadImage(filename) ){
       return 3;
     }
   }
@@ -589,7 +620,7 @@ int main(int argc, char **argv)
     for(i = 0; i < 256; ++i){
       readBlock(i);
     }
-    saveImage(argv[0]);
+    saveImage(filename);
   } else {
     printf("Image CRC...\n");
     getImageCRC();

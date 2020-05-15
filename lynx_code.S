@@ -1,5 +1,5 @@
 	.text
-	.globl _sram_lynx
+	.globl sram_lynx
 	.align 4
-_sram_lynx:
+sram_lynx:
 	.incbin "sram.o"
