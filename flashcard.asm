@@ -526,6 +526,8 @@ Clear1Block::
 ****************
 EraseFlash::
         jsr InfoErase
+//->	lda	#0
+//->	jsr	sectorErase
 	jsr chipErase
         lda #$43
         jsr SendSerial
@@ -875,7 +877,7 @@ InfoClear::
 InfoErase::
         SET_XY 0,INFO_Y
         PRINT "Erasing flash",,1
-        jmp PrintHex
+	rts
 
 ****************
 *  InfoRead    *

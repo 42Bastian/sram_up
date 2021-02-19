@@ -35,8 +35,8 @@ void OSerror(char *f,long i);
 
 int
 comm_setup(unsigned long Baudrate,
-	   char *portName,
-	   unsigned long timeout)
+           char *portName,
+           unsigned long timeout)
 {
   /*
   ** These statics hold the parameters if a re-init is needed.
@@ -54,13 +54,13 @@ comm_setup(unsigned long Baudrate,
   // Open COM Port
   //
   hPort= CreateFile(portName,
-		    GENERIC_READ|GENERIC_WRITE,
-		    0,
-		    NULL,
-		    OPEN_EXISTING,
-		    FILE_ATTRIBUTE_NORMAL|FILE_FLAG_NO_BUFFERING,
-		    NULL
-		    );
+                    GENERIC_READ|GENERIC_WRITE,
+                    0,
+                    NULL,
+                    OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL|FILE_FLAG_NO_BUFFERING,
+                    NULL
+    );
 
   /* Check for errors */
   if( hPort == INVALID_HANDLE_VALUE ){
@@ -254,9 +254,9 @@ void init_crctab()
     a = i;
     for(o = 0; o < 8; ++o){
       if ( a < 0 ){
-	a = (a<<1) ^ 0x95;
+        a = (a<<1) ^ 0x95;
       } else {
-	a <<= 1;
+        a <<= 1;
       }
     }
     crctab[i] = (unsigned char )a;
@@ -352,7 +352,7 @@ void sendBlock(int blk)
     do{
       c = getByte();
       if ( c != -1 ){
-	printf("(%02x) ",c);
+        printf("(%02x) ",c);
         fflush(stdout);
       }
     } while( c != 0x14 && c != 0x41 );
@@ -496,7 +496,8 @@ void help(void)
           " -x           : force writing\n"
           " -r file      : read card and save file with LNX header\n"
           " -w file      : write card\n"
-          " -l           : force upload of loader\n");
+          " -l           : force upload of loader\n"
+          " -g           : get and print CRCs from Lynx\n");
   exit(-1);
 }
 int main(int argc, char **argv)
@@ -514,6 +515,8 @@ int main(int argc, char **argv)
   int sendLynx = 0;
   int clear = -1;
   char *filename;
+  int getCrc = 0;
+
   ++argv; // skip process-name
   --argc;
   if ( argc == 0 ){
@@ -534,6 +537,10 @@ int main(int argc, char **argv)
       clear = atoi(argv[1]);
       argv += 2;
       argc -= 2;
+    } else if ( !strcmp(*argv,"-g")){
+      argv += 1;
+      argc -= 1;
+      getCrc = 1;
     } else if ( !strcmp(*argv,"-r")){
       argv += 1;
       argc -= 1;
@@ -608,7 +615,10 @@ int main(int argc, char **argv)
     sendLynxProgramm();
   }
 
-  if ( clear != -1 ){
+  if ( getCrc ){
+    printf("Get Lynx CRC...\n");
+    getLynxCRC(1);
+  } else  if ( clear != -1 ){
     printf("Filling card with %02x+sector\n",clear);
     for(i = 0; i < 256; ++i){
       printf("Clear block: %d\r",i); fflush(stdout);

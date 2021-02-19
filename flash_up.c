@@ -263,7 +263,7 @@ void init_crctab()
   }
 }
 
-void getLynxCRC()
+void getLynxCRC(int verbose)
 {
   int i;
   unsigned int n;
@@ -274,6 +274,15 @@ void getLynxCRC()
     ReadFile(hPort,lynxcrc+i,256-i,&n,NULL);
     i += n;
   } while ( i < 256 );
+  if ( verbose ){
+    for(i = 0; i < 256; ++i){
+      if ( (i % 16) == 0 ){
+        putchar('\n');
+      }
+      printf("%02x ",lynxcrc[i]);
+    }
+    putchar('\n');
+  }
 }
 
 int checkBlock(int blk)
@@ -480,7 +489,8 @@ void help(void)
           " -r file      : read card and save file with LNX header\n"
           " -e           : erase flash\n"
           " -s blocksize : 512,1024 or 2048, 1024 is default\n"
-          " -l           : force upload of loader\n");
+          " -l           : force upload of loader\n"
+          " -g           : get and print CRCs from Lynx\n");
   exit(-1);
 }
 int main(int argc, char **argv)
@@ -498,7 +508,9 @@ int main(int argc, char **argv)
   int sendLynx = 0;
   int clear = -1;
   int erase = 0;
+  int getCrc = 0;
   char *filename;
+
   ++argv; // skip process-name
   --argc;
   if ( argc == 0 ){
@@ -519,6 +531,10 @@ int main(int argc, char **argv)
       argv += 1;
       argc -= 1;
       erase = 1;
+    } else if ( !strcmp(*argv,"-g")){
+      argv += 1;
+      argc -= 1;
+      getCrc = 1;
     } else if ( !strcmp(*argv,"-r")){
       argv += 1;
       argc -= 1;
@@ -535,7 +551,7 @@ int main(int argc, char **argv)
       argv += 1;
       argc -= 1;
       flashCard = 1;
-        if ( argc != 0 && **argv != '-' ){
+      if ( argc != 0 && **argv != '-' ){
         filename = *argv;
         argv += 1;
         argc -= 1;
@@ -561,7 +577,7 @@ int main(int argc, char **argv)
       }
     } else if ( !strcmp(*argv,"-h")){
       help();
-   } else {
+    } else {
       fprintf(stderr,"Unknown option:%s\n",*argv);
       return 1;
     }
@@ -592,8 +608,10 @@ int main(int argc, char **argv)
     printf("Uploading programmer...\n");
     sendLynxProgramm();
   }
-
-  if ( erase ){
+  if ( getCrc ){
+    printf("Get Lynx CRC...\n");
+    getLynxCRC(1);
+  } else if ( erase ){
     printf("Erasing Flash\n");
     sendByte('C');
     sendByte('5');
@@ -612,7 +630,7 @@ int main(int argc, char **argv)
     int tmo = 0;
     do{
       printf("Get Lynx CRC...\n");
-      getLynxCRC();
+      getLynxCRC(0);
 
       for(o = 0,i = 0; i < 256; ++i){
         if ( imagecrc[i] == 0xffu ){
