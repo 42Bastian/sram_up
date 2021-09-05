@@ -184,7 +184,7 @@ void hexdump2(const char *left,const char * right)
 void sendByte(char c)
 {
   char dummy;
-  unsigned long n;
+  DWORD n;
   WriteFile(hPort,&c,1,&n,NULL);
   if ( n ){
     do{
@@ -194,7 +194,7 @@ void sendByte(char c)
 }
 int getByte()
 {
-  unsigned long n;
+  DWORD n;
   unsigned char c;
 //->  long tmo = 1;
 //->  do{
@@ -207,7 +207,7 @@ void sendLynxProgramm()
 {
   extern unsigned char sram_lynx[];
   int len;
-  unsigned long dwBytes;
+  DWORD dwBytes;
   int rlen;
 
   len = sram_lynx[4]*256+sram_lynx[5];
@@ -266,7 +266,7 @@ void init_crctab()
 void getLynxCRC(int verbose)
 {
   int i;
-  unsigned long n;
+  DWORD n;
   sendByte('C');
   sendByte('0');
   i = 0;
@@ -288,7 +288,7 @@ void getLynxCRC(int verbose)
 int checkBlock(int blk)
 {
   long len;
-  unsigned long n;
+  DWORD n;
 
   sendByte('C');
   sendByte('4');
@@ -314,7 +314,7 @@ int clearBlock(int blk, int clear)
 int readBlock(int blk)
 {
   long len;
-  unsigned long n;
+  DWORD n;
   len = 0;
 
   sendByte('C');
@@ -330,7 +330,7 @@ int readBlock(int blk)
 
 void sendBlock(int blk)
 {
-  unsigned long n;
+  DWORD n;
   int c;
   long total;
 
