@@ -647,10 +647,12 @@ int main(int argc, char **argv)
       getLynxCRC(0);
 
       for(o = 0,i = 0; i < 256; ++i){
-        if ( imagecrc[i] == 0xffu ){
-          force |= checkBlock(i) == 0;
+        int localForce = force;
+        if ( imagecrc[i] == 0xdu ){ /* CRC of all FFs */
+          printf("Checking block %d\n",i);
+          localForce |= checkBlock(i) == 0;
         }
-        if ( force == 1 || (lynxcrc[i] != imagecrc[i]) ){
+        if ( localForce == 1 || (lynxcrc[i] != imagecrc[i]) ){
           long x;
           printf(" %02x: %02x %c %02x: sending ...",
                  i,lynxcrc[i],
