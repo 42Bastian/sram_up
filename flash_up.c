@@ -81,12 +81,12 @@ comm_setup(unsigned long Baudrate,
     // WriteFileEx operations on the device.
     COMMTIMEOUTS myCOMMTIMEOUTS;
 
-    myCOMMTIMEOUTS.ReadIntervalTimeout=0;
-    myCOMMTIMEOUTS.ReadTotalTimeoutConstant=timeout; //old 100 ms 42BS
-    myCOMMTIMEOUTS.ReadTotalTimeoutMultiplier=5; //old 0
+    myCOMMTIMEOUTS.ReadIntervalTimeout = 2;
+    myCOMMTIMEOUTS.ReadTotalTimeoutConstant = 2;
+    myCOMMTIMEOUTS.ReadTotalTimeoutMultiplier = 2 ;
 
-    myCOMMTIMEOUTS.WriteTotalTimeoutConstant=100; //old 100 ms 42BS
-    myCOMMTIMEOUTS.WriteTotalTimeoutMultiplier=50; //old 0
+    myCOMMTIMEOUTS.WriteTotalTimeoutConstant = 100;
+    myCOMMTIMEOUTS.WriteTotalTimeoutMultiplier = 50;
 
     if( !GetCommState( hPort, &dcb ) ) OSerror("GetCommState",-1);
 
@@ -132,7 +132,7 @@ comm_setup(unsigned long Baudrate,
     if ( !SetCommTimeouts(hPort,&myCOMMTIMEOUTS) )
       OSerror("SetCommTimeouts",-1);
 
-    if ( !SetupComm(hPort,1024*64,256)) OSerror("SetupComm",-1);
+    if ( !SetupComm(hPort,1024*64,1024*64)) OSerror("SetupComm",-1);
   }
   return 0;
 }
@@ -217,11 +217,15 @@ void sendLynxProgramm()
   sectorBuffer[3] = sram_lynx[3];
   sectorBuffer[4] = (len >> 8) ^ 0xff;
   sectorBuffer[5] = (len & 0xff) ^ 0xff;
-  WriteFile(hPort, sectorBuffer,6,&dwBytes,NULL);
+  WriteFile(hPort, sectorBuffer,1,&dwBytes,NULL);
+  Sleep(2);
+  WriteFile(hPort, sectorBuffer+1,1,&dwBytes,NULL);
+  Sleep(2);
+  WriteFile(hPort, sectorBuffer+2,4,&dwBytes,NULL);
   ReadFile(hPort,sectorBuffer,6,&dwBytes,NULL);
   rlen = dwBytes;
   /* Hack for CP2102 adapter */
-  int x = 1024;
+  int x = sizeof(sectorBuffer);
   for(int i = 0; i < len;){
     int l;
     l = len - i;
@@ -243,6 +247,7 @@ void sendLynxProgramm()
     }
   } while( dwBytes > 0 );
   len = sram_lynx[4]*256+sram_lynx[5];
+  Sleep(100);
 //->  printf("Read %d (%d)\n",rlen, len+6);
 }
 
@@ -323,9 +328,12 @@ int readBlock(int blk)
   sendByte(blk);
 
   do{
-    ReadFile(hPort,buffer+blk*blocksize,blocksize-len,&n,NULL);
+    if ( !ReadFile(hPort,buffer+blk*blocksize,blocksize-len,&n,NULL) ){
+      return -1;
+    }
     len += n;
   } while( len < blocksize );
+  return 0;
 }
 
 void sendBlock(int blk)
@@ -338,15 +346,18 @@ void sendBlock(int blk)
   sendByte('1');
   sendByte(blocksize/256);
   sendByte(blk);
-  Sleep(25);
 
   do{
+    Sleep(25);
     WriteFile(hPort,buffer+blk*blocksize,blocksize,&n,NULL);
+//->    printf("done sending\n");
     total = 0;
     do{
       ReadFile(hPort,sectorBuffer,blocksize-total,&n,NULL);
       total += n;
+//->      printf("Got %d\n",n);
     } while( total < blocksize );
+    Sleep(20);
     sendByte(imagecrc[blk]);
     do{
       c = getByte();
@@ -596,7 +607,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if ( comm_setup(baudrate,portName,100) ) return 2;
+  if ( comm_setup(baudrate, portName, 1) ) return 2;
 
   int c = 1;
   if ( sendLynx == 0 ){
@@ -619,11 +630,14 @@ int main(int argc, char **argv)
       c = getByte();
     } while( c != 0x43 );
   } else if ( readCard == 1 ){
+    int error;
     printf("Read card...\n");
-    for(i = 0; i < 256; ++i){
-      readBlock(i);
+    for(i = 0, error = 0; i < 256 && error == 0; ++i){
+      error = readBlock(i);
     }
-    saveImage(filename);
+    if ( error == 0 ){
+      saveImage(filename);
+    }
   } else if ( flashCard ){
     printf("Image CRC...\n");
     getImageCRC();
