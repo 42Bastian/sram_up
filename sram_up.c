@@ -79,14 +79,18 @@ comm_setup(unsigned long Baudrate,
     // The parameters determine the behavior of
     // ReadFile, WriteFile, ReadFileEx, and
     // WriteFileEx operations on the device.
-    COMMTIMEOUTS myCOMMTIMEOUTS;
+    COMMTIMEOUTS timeouts = {0};
+    timeouts.ReadIntervalTimeout = 0;
+    timeouts.ReadTotalTimeoutConstant = 100;
+    timeouts.ReadTotalTimeoutMultiplier = 0;
+    timeouts.WriteTotalTimeoutConstant = 100;
+    timeouts.WriteTotalTimeoutMultiplier = 0;
 
-    myCOMMTIMEOUTS.ReadIntervalTimeout=0;
-    myCOMMTIMEOUTS.ReadTotalTimeoutConstant=timeout; //old 100 ms 42BS
-    myCOMMTIMEOUTS.ReadTotalTimeoutMultiplier=5; //old 0
-
-    myCOMMTIMEOUTS.WriteTotalTimeoutConstant=100; //old 100 ms 42BS
-    myCOMMTIMEOUTS.WriteTotalTimeoutMultiplier=50; //old 0
+    // sets the time-out parameters for all
+    // read and write operations on a
+    // specified communications device.
+    if ( !SetCommTimeouts(hPort,&timeouts) )
+      OSerror("SetCommTimeouts",-1);
 
     if( !GetCommState( hPort, &dcb ) ) OSerror("GetCommState",-1);
 
@@ -126,13 +130,8 @@ comm_setup(unsigned long Baudrate,
     if( !GetCommState( hPort, &dcb ) ) OSerror("GetCommState",-1);
     fprintf(stderr, "Baudrate %d\n",dcb.BaudRate);
 
-    // sets the time-out parameters for all
-    // read and write operations on a
-    // specified communications device.
-    if ( !SetCommTimeouts(hPort,&myCOMMTIMEOUTS) )
-      OSerror("SetCommTimeouts",-1);
 
-    if ( !SetupComm(hPort,1024*64,256)) OSerror("SetupComm",-1);
+    if ( !SetupComm(hPort,1024*64,1024*64)) OSerror("SetupComm",-1);
   }
   return 0;
 }
@@ -217,11 +216,15 @@ void sendLynxProgramm()
   sectorBuffer[3] = sram_lynx[3];
   sectorBuffer[4] = (len >> 8) ^ 0xff;
   sectorBuffer[5] = (len & 0xff) ^ 0xff;
-  WriteFile(hPort, sectorBuffer,6,&dwBytes,NULL);
+  WriteFile(hPort, sectorBuffer,1,&dwBytes,NULL);
+  Sleep(2);
+  WriteFile(hPort, sectorBuffer+1,1,&dwBytes,NULL);
+  Sleep(2);
+  WriteFile(hPort, sectorBuffer+2,4,&dwBytes,NULL);
   ReadFile(hPort,sectorBuffer,6,&dwBytes,NULL);
   rlen = dwBytes;
   /* Hack for CP2102 adapter */
-  int x = 1024;
+  int x = sizeof(sectorBuffer);
   for(int i = 0; i < len;){
     int l;
     l = len - i;
@@ -243,6 +246,7 @@ void sendLynxProgramm()
     }
   } while( dwBytes > 0 );
   len = sram_lynx[4]*256+sram_lynx[5];
+  Sleep(100);
 //->  printf("Read %d (%d)\n",rlen, len+6);
 }
 
@@ -263,7 +267,7 @@ void init_crctab()
   }
 }
 
-void getLynxCRC()
+void getLynxCRC(int verbose)
 {
   int i;
   DWORD n;
@@ -274,6 +278,15 @@ void getLynxCRC()
     ReadFile(hPort,lynxcrc+i,256-i,&n,NULL);
     i += n;
   } while ( i < 256 );
+  if ( verbose ){
+    for(i = 0; i < 256; ++i){
+      if ( (i % 16) == 0 ){
+        putchar('\n');
+      }
+      printf("%02x ",lynxcrc[i]);
+    }
+    putchar('\n');
+  }
 }
 
 int checkBlock(int blk)
@@ -322,8 +335,10 @@ int readBlock(int blk)
 
   do{
     ReadFile(hPort,buffer+blk*blocksize,blocksize-len,&n,NULL);
+    if ( n == 0 ) return -1;
     len += n;
   } while( len < blocksize );
+  return 0;
 }
 
 void sendBlock(int blk)
@@ -336,9 +351,9 @@ void sendBlock(int blk)
   sendByte('1');
   sendByte(blocksize/256);
   sendByte(blk);
-  Sleep(25);
 
   do{
+    Sleep(25);
     WriteFile(hPort,buffer+blk*blocksize,blocksize,&n,NULL);
     if ( blocksize == 512 ){
       WriteFile(hPort,buffer+blk*blocksize,blocksize,&n,NULL);
@@ -348,6 +363,7 @@ void sendBlock(int blk)
       ReadFile(hPort,sectorBuffer,blocksize-total,&n,NULL);
       total += n;
     } while( total < blocksize );
+    Sleep(20);
     sendByte(imagecrc[blk]);
     do{
       c = getByte();
@@ -602,7 +618,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if ( comm_setup(baudrate,portName,100) ) return 2;
+  if ( comm_setup(baudrate, portName, 1) ) return 2;
 
   int c = 1;
   if ( sendLynx == 0 ){
@@ -614,7 +630,6 @@ int main(int argc, char **argv)
     printf("Uploading programmer...\n");
     sendLynxProgramm();
   }
-
   if ( getCrc ){
     printf("Get Lynx CRC...\n");
     getLynxCRC(1);
@@ -626,24 +641,31 @@ int main(int argc, char **argv)
     }
     putchar('\n');
   } else if ( readCard == 1 ){
+    int error;
     printf("Read card...\n");
-    for(i = 0; i < 256; ++i){
-      readBlock(i);
+    for(i = 0, error = 0; i < 256 && error == 0; ++i){
+      error = readBlock(i);
     }
+    if ( error == 0 ){
     saveImage(filename);
   } else {
+      printf("Error reading, no image saved!\n");
+    }
+  } else if ( flashCard ){
     printf("Image CRC...\n");
     getImageCRC();
     int tmo = 0;
     do{
       printf("Get Lynx CRC...\n");
-      getLynxCRC();
+      getLynxCRC(0);
 
       for(o = 0,i = 0; i < 256; ++i){
-        if ( imagecrc[i] == 0xffu ){
-          force |= checkBlock(i) == 0;
+        int localForce = force;
+        if ( imagecrc[i] == 0xdu ){ /* CRC of all FFs */
+          printf("Checking block %d\n",i);
+          localForce |= checkBlock(i) == 0;
         }
-        if ( force == 1 || (lynxcrc[i] != imagecrc[i]) ){
+        if ( localForce == 1 || (lynxcrc[i] != imagecrc[i]) ){
           long x;
           printf(" %02x: %02x %c %02x: sending ...",
                  i,lynxcrc[i],

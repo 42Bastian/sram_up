@@ -79,14 +79,18 @@ comm_setup(unsigned long Baudrate,
     // The parameters determine the behavior of
     // ReadFile, WriteFile, ReadFileEx, and
     // WriteFileEx operations on the device.
-    COMMTIMEOUTS myCOMMTIMEOUTS;
+    COMMTIMEOUTS timeouts = {0};
+    timeouts.ReadIntervalTimeout = 0;
+    timeouts.ReadTotalTimeoutConstant = 100;
+    timeouts.ReadTotalTimeoutMultiplier = 0;
+    timeouts.WriteTotalTimeoutConstant = 100;
+    timeouts.WriteTotalTimeoutMultiplier = 0;
 
-    myCOMMTIMEOUTS.ReadIntervalTimeout = 2;
-    myCOMMTIMEOUTS.ReadTotalTimeoutConstant = 2;
-    myCOMMTIMEOUTS.ReadTotalTimeoutMultiplier = 2 ;
-
-    myCOMMTIMEOUTS.WriteTotalTimeoutConstant = 100;
-    myCOMMTIMEOUTS.WriteTotalTimeoutMultiplier = 50;
+    // sets the time-out parameters for all
+    // read and write operations on a
+    // specified communications device.
+    if ( !SetCommTimeouts(hPort,&timeouts) )
+      OSerror("SetCommTimeouts",-1);
 
     if( !GetCommState( hPort, &dcb ) ) OSerror("GetCommState",-1);
 
@@ -126,11 +130,6 @@ comm_setup(unsigned long Baudrate,
     if( !GetCommState( hPort, &dcb ) ) OSerror("GetCommState",-1);
     fprintf(stderr, "Baudrate %d\n",dcb.BaudRate);
 
-    // sets the time-out parameters for all
-    // read and write operations on a
-    // specified communications device.
-    if ( !SetCommTimeouts(hPort,&myCOMMTIMEOUTS) )
-      OSerror("SetCommTimeouts",-1);
 
     if ( !SetupComm(hPort,1024*64,1024*64)) OSerror("SetupComm",-1);
   }
@@ -328,9 +327,8 @@ int readBlock(int blk)
   sendByte(blk);
 
   do{
-    if ( !ReadFile(hPort,buffer+blk*blocksize,blocksize-len,&n,NULL) ){
-      return -1;
-    }
+    ReadFile(hPort,buffer+blk*blocksize,blocksize-len,&n,NULL);
+    if ( n == 0 ) return -1;
     len += n;
   } while( len < blocksize );
   return 0;
@@ -637,6 +635,8 @@ int main(int argc, char **argv)
     }
     if ( error == 0 ){
       saveImage(filename);
+    } else {
+      printf("Error reading, no image saved!\n");
     }
   } else if ( flashCard ){
     printf("Image CRC...\n");

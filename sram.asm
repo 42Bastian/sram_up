@@ -6,7 +6,7 @@
 *
 ****************
 
-VERSION	equ "08"
+VERSION	equ "09"
 Baudrate	EQU 62500
 ;;->BRKuser	    set 1
 DEBUG	set 1
@@ -398,30 +398,34 @@ LoadBlock::
 	sei
 
 	MOVEI puffer,p_puffer
-	lda size
-	sta temp
+	ldx size
+	stx temp
 	ldy #0
+.2	      lda $fcb0
+	      bne .99
+	      bit $fd8c
+	    bvc .2
+	    lda $fd8d
+	    sta (p_puffer),y
+	    iny
+	  bne .2
+	  inc p_puffer+1
+	  dex
+	bne .2
+
+	MOVEI puffer,p_puffer
 	stz check
-.2	  lda $fcb0
-	  bne .99
-	  bit $fd8c
-	  bvc .2
-
-	  lda $fd8d
-	  sta (p_puffer),y
-	  sty $fdae
-	  sta _CARD1
-
-	  eor check
-	  tax
-	  lda crctab,x
-	  sta check
-	  iny
-	bne .2
-	inc p_puffer+1
-	dec temp
-	bne .2
-
+.3	    lda (p_puffer),y
+	    sty $fdae
+	    eor check
+	    tax
+	    lda crctab,x
+	    sta check
+	    iny
+	  bne .3
+	  inc p_puffer+1
+	  dec temp
+	bne .3
 .98
 	cli
 	stz $fdae
@@ -695,7 +699,7 @@ SendSerial::
 
 WaitSerial::
 	sec
-	inc $fda1
+//->	inc $fda1
 	lda $fcb0	; break it with any key
 	bne .99
 	bit $fd8c
@@ -703,7 +707,7 @@ WaitSerial::
 	lda $fd8d
 	clc
 .99
-	stz $fda1
+//->	stz $fda1
 	rts
 
 WaitSerialDebug::
@@ -720,7 +724,7 @@ WaitSerialDebug::
  ENDIF
 	clc
 .99
-	stz $fda1
+//->	stz $fda1
 	rts
 ****************
 * InitCRC      *
