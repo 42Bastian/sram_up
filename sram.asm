@@ -206,6 +206,10 @@ Hello::
 * SendCRCs     *
 ***************
 SendCRCs::
+	jsr WaitSerial	; get blocksize
+	bcs .99		; got a break
+	sta size
+
 	stz BlockCounter
 .0
 	  jsr SelectBlock
@@ -225,6 +229,7 @@ SendCRCs::
 	  jsr SendSerial
 	  inc BlockCounter
 	bne .0
+.99
 	stz $fdae
 	rts
 ****************
@@ -394,7 +399,7 @@ ReadBlock::
 ****************
 *  LoadBlock   *
 LoadBlock::
-//->	jsr SelectBlock
+	jsr SelectBlock
 
 	sei
 	MOVEI puffer,p_puffer
@@ -404,7 +409,7 @@ LoadBlock::
 .2	      bit $fd8c
 	    bvc .2
 	    lda $fd8d
-//->	    sta _CARD1
+	    sta _CARD1
 	    sta (p_puffer),y
 	    iny
 	  bne .2
@@ -614,7 +619,7 @@ InfoClear::
 InfoRead::
 	pha
 	SET_XY 0,INFO_Y
-	PRINT "Reading block :	",,1
+	PRINT "Reading block :  ",,1
 	SET_XY 110,INFO_Y
 	pla
 	jmp PrintHex
@@ -623,7 +628,7 @@ InfoRead::
 InfoLoad::
 	pha
 	SET_XY 0,INFO_Y
-	PRINT "Loading block :	",,1
+	PRINT "Loading block :  ",,1
 	SET_XY 110,INFO_Y
 	pla
 	bra PrintHex
@@ -634,12 +639,12 @@ InfoWrite::
 	LDAY Test
 	jsr print
 	rts
-Test	dc.b  "Writing block :",0
+Test	dc.b  "Writing block :  ",0
 ****************
 *   InfoCheck  *
 InfoCheck::
 	SET_XY 0,INFO_Y
-	PRINT "Checking block :	     ",,1
+	PRINT "Checking block : ",,1
 	rts
 ****************
 *   PrintHex   *
@@ -809,5 +814,5 @@ cls_color
 cls_data
 	dc.b 2,$10,0
 
-size	dc.b 8	; 1K blocks
+size	dc.b 4	; 1K blocks
 pal	STANDARD_PAL

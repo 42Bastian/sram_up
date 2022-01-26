@@ -276,6 +276,7 @@ int getLynxCRC(int verbose)
   DWORD n;
   sendByte('C');
   sendByte('0');
+  sendByte(blocksize/256);
   i = 0;
   memset(lynxcrc, 0, 256);
 
@@ -448,11 +449,8 @@ void getImageCRC()
 
   for(i = 0; i < 256; ++i){
     for(crc = 0,o = 0; o < blocksize; ++o){
-//->      if ((o & 255)==0) printf("\n");
       crc ^= *p++;
-//->      printf("%02x ",crc);
       crc = crctab[ crc ];
-//->      printf("%02x ",crc);
     }
     if ( blocksize == 512 ){
       p -= 512;
@@ -715,7 +713,6 @@ int main(int argc, char **argv)
   } else if ( flashCard ){
     printf("Image CRC...\n");
     getImageCRC();
-          exit(1);
     int tmo = 0;
     do{
       printf("Get Lynx CRC...\n");

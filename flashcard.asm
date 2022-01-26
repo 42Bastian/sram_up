@@ -482,11 +482,19 @@ Hello::
 * SendCRCs     *
 ***************
 SendCRCs::
+	jsr WaitSerial	; get blocksize
+	bcs .99		; got a break
+	sta size
+
 	stz BlockCounter
 .0
 	  jsr SelectBlock
 	  lda size
 	  sta temp
+	stz CurrY
+	stz CurrX
+	jsr PrintHex
+
 	  lda #0
 	  tay
 .1
@@ -501,6 +509,7 @@ SendCRCs::
 	  jsr SendSerial
 	  inc BlockCounter
 	bne .0
+.99
 	stz $fdae
 	rts
 ****************

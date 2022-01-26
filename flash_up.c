@@ -274,6 +274,7 @@ int getLynxCRC(int verbose)
   DWORD n;
   sendByte('C');
   sendByte('0');
+  sendByte(blocksize/256);
   i = 0;
   memset(lynxcrc, 0, 256);
 
