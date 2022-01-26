@@ -491,10 +491,6 @@ SendCRCs::
 	  jsr SelectBlock
 	  lda size
 	  sta temp
-	stz CurrY
-	stz CurrX
-	jsr PrintHex
-
 	  lda #0
 	  tay
 .1
