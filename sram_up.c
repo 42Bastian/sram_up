@@ -188,17 +188,15 @@ void sendByte(char c)
   if ( n ){
     do{
       ReadFile(hPort,&dummy,1,&n,NULL);
-    } while( dummy != c );
+    } while( dummy != c && n == 1);
   }
 }
+
 int getByte()
 {
   DWORD n;
   unsigned char c;
-//->  long tmo = 1;
-//->  do{
   ReadFile(hPort,&c,1,&n,NULL);
-//->  } while( n != 1 && --tmo);
   return n == 1 ? c : -1;
 }
 
@@ -236,6 +234,9 @@ void sendLynxProgramm()
       printf("Error\n");
     }
     ReadFile(hPort,sectorBuffer,l,&dwBytes,NULL);
+    if ( &dwBytes == 0 ){
+      return;
+    }
     rlen += dwBytes;
     i += l;
   }
@@ -253,29 +254,36 @@ void sendLynxProgramm()
 void init_crctab()
 {
   int i,o;
-  char a;
-  for( i = 0; i<256; ++i){
+  int a;
+  for( i = 0; i < 256; ++i){
     a = i;
     for(o = 0; o < 8; ++o){
-      if ( a < 0 ){
-        a = (a<<1) ^ 0x95;
+      if ( (a & 0x80) != 0 ){
+        a <<= 1;
+        a ^= 0x95;
       } else {
         a <<= 1;
       }
+      a &= 0xff;
     }
     crctab[i] = (unsigned char )a;
   }
 }
 
-void getLynxCRC(int verbose)
+int getLynxCRC(int verbose)
 {
   int i;
   DWORD n;
   sendByte('C');
   sendByte('0');
   i = 0;
+  memset(lynxcrc, 0, 256);
+
   do{
     ReadFile(hPort,lynxcrc+i,256-i,&n,NULL);
+    if ( n == 0 ){
+      return 0;
+    }
     i += n;
   } while ( i < 256 );
   if ( verbose ){
@@ -287,12 +295,55 @@ void getLynxCRC(int verbose)
     }
     putchar('\n');
   }
+  return 1;
 }
+#if 0
+int getLynxCRC(int verbose)
+{
+  int i;
+  DWORD n;
+  char a;
+  sendByte('C');
+  sendByte('0');
+  i = 0;
+  memset(lynxcrc, 0, 256);
+  do{
+     ReadFile(hPort,&a,1,&n,NULL);
+     Sleep(10);
+  } while(a != 0x42);
+  do{
+    ReadFile(hPort,lynxcrc+i,256-i,&n,NULL);
+    if ( n == 0 ){
+      return 0;
+    }
+    i += n;
+  } while ( i < 256 );
 
+  if ( verbose ){
+    for(i = 0; i < 256; ++i){
+      if ( (i % 16) == 0 ){
+        putchar('\n');
+      }
+      printf("%02x ",lynxcrc[i]);
+    }
+    putchar('\n');
+  }
+
+  return 1;
+}
+#endif
 int checkBlock(int blk)
 {
   long len;
   DWORD n;
+
+  for(len = 0; len < blocksize; ++len){
+    if ( buffer[blk*blocksize+len] != 0xff ) break;
+  }
+
+  if ( len == blocksize ) return 1;
+
+  printf("Checking block %d\n",blk);
 
   sendByte('C');
   sendByte('4');
@@ -302,6 +353,9 @@ int checkBlock(int blk)
   len = 0;
   do{
     ReadFile(hPort,sectorBuffer,blocksize-len,&n,NULL);
+    if ( n == 0 ){
+      return 1;
+    }
     len += n;
   } while( len < blocksize );
 
@@ -341,7 +395,7 @@ int readBlock(int blk)
   return 0;
 }
 
-void sendBlock(int blk)
+int sendBlock(int blk)
 {
   DWORD n;
   int c;
@@ -361,6 +415,8 @@ void sendBlock(int blk)
     total = 0;
     do{
       ReadFile(hPort,sectorBuffer,blocksize-total,&n,NULL);
+      if ( n == 0) return 0;
+
       total += n;
     } while( total < blocksize );
     Sleep(20);
@@ -380,18 +436,23 @@ void sendBlock(int blk)
       fflush(stdout);
     }
   } while( c != 0x42 );
+
+  return 1;
 }
 
 void getImageCRC()
 {
   int i,o;
-  unsigned char crc;
+  unsigned int crc;
   unsigned char *p = buffer;
 
   for(i = 0; i < 256; ++i){
     for(crc = 0,o = 0; o < blocksize; ++o){
+//->      if ((o & 255)==0) printf("\n");
       crc ^= *p++;
+//->      printf("%02x ",crc);
       crc = crctab[ crc ];
+//->      printf("%02x ",crc);
     }
     if ( blocksize == 512 ){
       p -= 512;
@@ -518,7 +579,7 @@ void help(void)
 }
 int main(int argc, char **argv)
 {
-  DWORD dwBytes;
+  long dwBytes;
   int fd;
   char *ptr = buffer;
   int len;
@@ -530,7 +591,7 @@ int main(int argc, char **argv)
   int force = 0;
   int sendLynx = 0;
   int clear = -1;
-  char *filename;
+  char *filename = NULL;
   int getCrc = 0;
 
   ++argv; // skip process-name
@@ -612,7 +673,7 @@ int main(int argc, char **argv)
       fprintf(stderr,"Error, file exists <%s>\n",filename);
       return 1;
     }
-  } else if ( clear == -1 ){
+  } else if ( clear == -1 && filename){
     if ( loadImage(filename) ){
       return 3;
     }
@@ -654,15 +715,17 @@ int main(int argc, char **argv)
   } else if ( flashCard ){
     printf("Image CRC...\n");
     getImageCRC();
+          exit(1);
     int tmo = 0;
     do{
       printf("Get Lynx CRC...\n");
-      getLynxCRC(0);
-
+      if ( getLynxCRC(0) == 0 ){
+        printf("COMm error\n");
+        return -1;
+      }
       for(o = 0,i = 0; i < 256; ++i){
         int localForce = force;
         if ( imagecrc[i] == 0xdu ){ /* CRC of all FFs */
-          printf("Checking block %d\n",i);
           localForce |= checkBlock(i) == 0;
         }
         if ( localForce == 1 || (lynxcrc[i] != imagecrc[i]) ){
@@ -671,7 +734,10 @@ int main(int argc, char **argv)
                  i,lynxcrc[i],
                  lynxcrc[i]==imagecrc[i] ? '=' : '!',imagecrc[i]);
           fflush(stdout);
-          sendBlock(i);
+          if ( sendBlock(i) == 0 ){
+            printf("\nError sending\n");
+            return -1;
+          }
           printf("!\n");
           ++o;
         }

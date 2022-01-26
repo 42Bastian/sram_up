@@ -1,17 +1,17 @@
 ***************
-* FLASH.ASM
-* flash-ROM writer
+* SRAM.ASM
+* SRAM writer
 *
 * created : 31.08.96
 *
 ****************
 
-VERSION	equ "09"
+VERSION		equ "09"
 Baudrate	EQU 62500
 ;;->BRKuser	    set 1
-DEBUG	set 1
+DEBUG		set 1
 
-INFO_Y	EQU 40
+INFO_Y		EQU 40
 
 	include <includes\hardware.inc>	   ; get hardware-names
 ****************
@@ -38,21 +38,21 @@ INFO_Y	EQU 40
  BEGIN_ZP
 BlockCounter	ds 1
 p_puffer	ds 2
-check	ds 1
-retries	ds 1
+check		ds 1
+retries		ds 1
 delayCount	ds 1
 VBLcount	ds 1
-seconds	ds 1
-state	ds 1
+seconds		ds 1
+state		ds 1
  END_ZP
 
  BEGIN_ZP
-_BG_Color	 ds 1
-_FG_Color	 ds 1
-_Invers	 ds 1	 ; $FF => inverted
-_CurrX	 ds 1	 ; cursor X(0..79)
-_CurrY	 ds 1	 ; cursor Y(0..16)
-_TxtPtr	 ds 2
+_BG_Color	ds 1
+_FG_Color	ds 1
+_Invers		ds 1		; $FF => inverted
+_CurrX		ds 1		; cursor X(0..79)
+_CurrY		ds 1		; cursor Y(0..16)
+_TxtPtr		ds 2
  END_ZP
 
 
@@ -185,13 +185,13 @@ dummy
 	rts
 
 commands
-	dc.w SendCRCs	      ; "0"
-	dc.w Write1Block      ; "1" write single block
-	dc.w WriteFlash	      ; "2" write whole SRAM
-	dc.w Hello	      ; "3" check if we`re already installed
-	dc.w Read1Block	      ; "4" read block
-	dc.w Clear1Block      ; "5" zero a block
-	dc.w ReadPuffer	      ; "6" read last buffer
+	dc.w SendCRCs		; "0"
+	dc.w Write1Block	; "1" write single block
+	dc.w WriteFlash		; "2" write whole SRAM
+	dc.w Hello		; "3" check if we`re already installed
+	dc.w Read1Block		; "4" read block
+	dc.w Clear1Block	; "5" zero a block
+	dc.w ReadPuffer		; "6" read last buffer
 
 _CARD0 equ $FCB2
 _CARD1 equ $FCB3
@@ -208,22 +208,22 @@ Hello::
 SendCRCs::
 	stz BlockCounter
 .0
-	jsr SelectBlock
-	lda size
-	sta temp
-	lda #0
-	tay
+	  jsr SelectBlock
+	  lda size
+	  sta temp
+	  lda #0
+	  tay
 .1
-	  eor _CARD0
-	  tax
-	  lda crctab,x
-	  sty $fdae
-	  iny
+	      eor _CARD0
+	      tax
+	      lda crctab,x
+	      sty $fdae
+	      iny
+	    bne .1
+	    dec temp
 	  bne .1
-	  dec temp
-	bne .1
-	jsr SendSerial
-	inc BlockCounter
+	  jsr SendSerial
+	  inc BlockCounter
 	bne .0
 	stz $fdae
 	rts
@@ -232,10 +232,10 @@ SendCRCs::
 ****************
 Clear1Block::
 	jsr WaitSerial	; get block #
-	bcs .99	; got a break
+	bcs .99		; got a break
 	sta BlockCounter
 	jsr WaitSerial	; get pattern
-	bcs .99	; got a break
+	bcs .99		; got a break
 	pha
 	jsr InfoClear
 	pla
@@ -277,8 +277,8 @@ ReadPuffer:
 * Read1Block	*
 ****************
 Read1Block::
-        jsr WaitSerial  ; get blocksize
-        bcs .99         ; got a break
+        jsr WaitSerial		; get blocksize
+        bcs .99			; got a break
 	sta size
 	jsr WaitSerial		; get block #
 	bcs .99			; got a break
@@ -292,8 +292,8 @@ Read1Block::
 * Write1Block  *
 ****************
 Write1Block::
-        jsr WaitSerial  ; get blocksize in 256byte chunks
-        bcs .99         ; got a break
+        jsr WaitSerial		; get blocksize in 256byte chunks
+        bcs .99			; got a break
 	sta size
 	jsr WaitSerial		; get block #
 	bcs .99			; got a break
@@ -394,24 +394,26 @@ ReadBlock::
 ****************
 *  LoadBlock   *
 LoadBlock::
-	jsr SelectBlock
-	sei
+//->	jsr SelectBlock
 
+	sei
 	MOVEI puffer,p_puffer
 	ldx size
 	stx temp
 	ldy #0
-.2	      lda $fcb0
-	      bne .99
-	      bit $fd8c
+.2	      bit $fd8c
 	    bvc .2
 	    lda $fd8d
+//->	    sta _CARD1
 	    sta (p_puffer),y
 	    iny
 	  bne .2
 	  inc p_puffer+1
 	  dex
 	bne .2
+
+	lda $fcb0
+	bne .99
 
 	MOVEI puffer,p_puffer
 	stz check
@@ -444,7 +446,7 @@ LoadBlock::
 
 	lda #$14		; ko
 	jsr SendSerial
-	bra LoadBlock		       ; load again
+	bra LoadBlock		; load again
 
 .9
 	lda #$41

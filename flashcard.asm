@@ -37,7 +37,6 @@ INFO_Y		EQU 40
 
  BEGIN_ZP
 BlockCounter	ds 1
-blockAddress	ds 2
 p_puffer	ds 2
 check		ds 1
 retries		ds 1
@@ -45,32 +44,33 @@ delayCount	ds 1
 VBLcount	ds 1
 seconds		ds 1
 state		ds 1
+blockAddress	ds 2
  END_ZP
 
  BEGIN_ZP
 _BG_Color	 ds 1
 _FG_Color	 ds 1
-_Invers		 ds 1		 ; $FF => inverted
-_CurrX		 ds 1		 ; cursor X(0..79)
-_CurrY		 ds 1		 ; cursor Y(0..16)
+_Invers		 ds 1		; $FF => inverted
+_CurrX		 ds 1		; cursor X(0..79)
+_CurrY		 ds 1		; cursor Y(0..16)
 _TxtPtr		 ds 2
  END_ZP
 
 
  BEGIN_MEM
-		ALIGN 4
+	ALIGN 4
 screen0
 	ds SCREEN.LEN
 
-		ALIGN 256
+	ALIGN 256
 puffer::
 	ds 2048
-crctab		ds 256
+crctab	ds 256
 irq_vektoren
 	ds 16
 
  END_MEM
-		run LOMEM	; code directly after variables
+	run LOMEM	; code directly after variables
 ****************
 *     INIT     *
 Start::
@@ -195,13 +195,13 @@ dummy
 	rts
 
 commands
-	dc.w SendCRCs	      ; "0"
-	dc.w Write1Block      ; "1" write single block
-	dc.w WriteFlash	      ; "2" write whole SRAM
-	dc.w Hello	      ; "3" check if we`re already installed
-	dc.w Read1Block	      ; "4" read block
-	dc.w EraseFlash	      ; "5" clear flash
-	dc.w ReadPuffer	      ; "6" read last buffer
+	dc.w SendCRCs		; "0"
+	dc.w Write1Block	; "1" write single block
+	dc.w WriteFlash		; "2" write whole SRAM
+	dc.w Hello		; "3" check if we`re already installed
+	dc.w Read1Block		; "4" read block
+	dc.w EraseFlash		; "5" clear flash
+	dc.w ReadPuffer		; "6" read last buffer
 
 _CARD0 equ $FCB2
 _CARD1 equ $FCB3
@@ -872,7 +872,7 @@ _512	dc.b "512KB",0
 InfoClear::
 	pha
 	SET_XY 0,INFO_Y
-	PRINT "Clearing block :	 ",,1
+	PRINT "Clearing block :  ",,1
 	SET_XY 110,INFO_Y
 	lda BlockCounter
 	jsr PrintHex
@@ -884,7 +884,7 @@ InfoClear::
 *  InfoErase	*
 InfoErase::
 	SET_XY 0,INFO_Y
-	PRINT "Erasing flash",,1
+	PRINT "Erasing flash     ",,1
 	rts
 
 ****************
@@ -892,7 +892,7 @@ InfoErase::
 InfoRead::
 	pha
 	SET_XY 0,INFO_Y
-	PRINT "Reading block :	",,1
+	PRINT "Reading block :   ",,1
 	SET_XY 110,INFO_Y
 	pla
 	jmp PrintHex
@@ -901,7 +901,7 @@ InfoRead::
 InfoLoad::
 	pha
 	SET_XY 0,INFO_Y
-	PRINT "Loading block :	",,1
+	PRINT "Loading block :   ",,1
 	SET_XY 110,INFO_Y
 	pla
 	jsr PrintHex
