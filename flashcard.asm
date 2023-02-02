@@ -6,7 +6,7 @@
 *
 ****************
 
-VERSION		equ "02"
+VERSION		equ "03"
 Baudrate	EQU 62500
 ;;->BRKuser	    set 1
 DEBUG		set 1
@@ -252,13 +252,13 @@ chipErase::
 	lda _CARD0
 	bpl .wait
 	rts
-
 ;----------------------------------------
 ; Erase sector of 4k
 ;
 ; Note: A Lynx block is 2k, so this routine will
 ;	clear 2 Lynx blocks!
 ;----------------------------------------
+ IF 0
 sectorErase::
 	pha
 
@@ -291,10 +291,11 @@ sectorErase::
 	lda _CARD0
 	bpl .wait
 	rts
-
+ ENDIF
 ;----------------------------------------
 ; Read flash ID
 ;----------------------------------------
+ IF 0
 check_flash::
 	jsr set5555
 	lda #$AA
@@ -320,8 +321,14 @@ check_flash::
 	ldx #$f0
 	stx _CARD1
 	jmp PrintHex
-
+ ENDIF
+;----------------------------------------
+; Write one byte into the current block
+;----------------------------------------
 writeBlockByte::
+//->	inc
+//->	beq	.ff
+
 	phy
 	pha
 
@@ -339,21 +346,29 @@ writeBlockByte::
 
 	jsr SelectBlock
 
-	ldy #0
-	ldx blockAddress+1
+	lda blockAddress+1
 	beq .2
 .1
+	ldx #256/8
+.11
+	REPT 8
 	stz _CARD0
-	dey
-	bne .1
+	ENDR
 	dex
+	bne .11
+	dec
 	bne .1
 .2
-	ldx blockAddress
+	lda blockAddress
+	beq .4
+	lsr
+	bcc .3
+	stz _CARD0
 	beq .4
 .3
 	stz _CARD0
-	dex
+	stz _CARD0
+	dec
 	bne .3
 .4
 	pla
@@ -361,114 +376,71 @@ writeBlockByte::
 
 	ply
 	inc blockAddress
-	bne .9
+	beq .8
+	rts
+.8
 	inc blockAddress+1
-.9
 	rts
+//->.ff
+//->	dec
+//->	inc blockAddress
+//->	beq .8
+//->	rts
 
 ;----------------------------------------
-; Write Byte to flash
+; Set $2AAA
 ;----------------------------------------
-/// XXX: Use block + offset instead of address.
-writeFlashByte::
-	pha
-	phx
-	phy
-
-	jsr set5555
-	lda #$AA
-	sta _CARD1
-
-	jsr set2aaa
-	lda #$55
-	sta _CARD1
-
-	jsr set5555
-	lda #$A0
-	sta _CARD1
-
-	ply
-	plx
-	jsr setAddress
-
-	pla
-	sta _CARD1
-
-	and #$7f
-	eor #$80
-	tax
-.1
-	txa
-	and _CARD0
-	beq .1
-
-	rts
-
-;-------------------
-; X:Y - address
-setAddress::
-	txa
-	lsr
-	lsr
-	lsr
-	jsr SelectBlockA
-	txa
-	ldx #0
-	and #$7
-	beq .2
-.1
-	stz _CARD0
-	dex
-	bne .1
-	dec
-	bne .1
-.2
-	tya
-	beq .4
-.3
-	stz _CARD0
-	dey
-	bne .3
-.4
-	rts
 
 set2aaa::
 	lda #5
 	jsr SelectBlockA
 
-	ldx #0
-	ldy #2
+	lda #2
 .0
+	ldx #256/8
+.01
+	REPT 8
 	stz _CARD0
+	ENDR
 	dex
+	bne .01
+
+	dec
 	bne .0
 
-	dey
-	bne .0
-
-	ldx #$aa
+	ldx #$aa/5
 .1
+	REPT 5
 	stz _CARD0
+	ENDR
 	dex
 	bne .1
 	rts
 
+;----------------------------------------
+; Set $5555
+;----------------------------------------
 set5555::
 	lda #10
 	jsr SelectBlockA
 
-	ldy #5
-	ldx #0
+	lda #5
 .0
+	ldx #256/8
+.01
+	REPT 8
 	stz _CARD0
+	ENDR
 	dex
-	bne .0
-	dey
+	bne .01
+	dec
 	bne .0
 
-	ldx #$55
+	ldx #$55/5
 .1
+	REPT 5
 	stz _CARD0
+	ENDR
 	dex
 	bne .1
 	rts
@@ -531,8 +503,6 @@ Clear1Block::
 ****************
 EraseFlash::
 	jsr InfoErase
-//->	lda	#0
-//->	jsr	sectorErase
 	jsr chipErase
 	lda #$43
 	jsr SendSerial
@@ -565,7 +535,6 @@ ReadPuffer:
 	iny
 	bne .4
 	rts
-
 
 ****************
 * Read1Block	*
@@ -604,11 +573,19 @@ Write1Block_wf
 	jsr WriteBlock
 .1
 	jsr CheckBlock
-	bcc .0
+	bcs .ok
+	lda $fcb0
+	beq .0
+.99
+	lda #42
+	jsr SendSerial
+	sec
+	rts
+
+.ok
 	lda #$42
 	jsr SendSerial
 	clc
-.99
 	rts
 ****************
 *  WriteFlash  *
@@ -617,7 +594,7 @@ WriteFlash::
 	lda size
 	jsr InfoSize
 	stz BlockCounter
-	lda #0+20
+	lda #0
 .0
 	jsr Write1Block_wf
 	bcs .99				; break
@@ -1035,72 +1012,59 @@ InitCRC:
 ****************
 * Select a block
 ****************
+SelectBlock::
+	lda BlockCounter
 SelectBlockA::
-	phx
-	phy
-	pha
-	lda _IOdat
-	and #$fC
-	tay
-	ora #2
-	tax
-	pla
+	ldx #2
+	ldy #3
 	SEC
 	BRA .SBL2
 .SLB0
-	BCC .SLB1
 	STX $FD8B
 	CLC
 .SLB1
-	INX
-	STX $FD87
-	DEX
+	STY $FD87
 .SBL2
 	STX $FD87
 	ROL
-	STY $FD8B
-	BNE .SLB0
-
+	STZ $FD8B
+	BEQ .exit
+	BCS .SLB0
+	BRA .SLB1
+.exit
 	lda _IOdat
 	sta $fd8b
-	ply
-	plx
-.exit
 	RTS
-
+ IF 0
 SelectBlock::
 	pha
 	phx
 	phy
-	lda _IOdat
-	and #$fC
-	tay
-	ora #2
-	tax
 	lda BlockCounter
+	ldx #2
+	ldy #3
 	SEC
-	BRA SBL2
-SLB0
-	BCC SLB1
+	BRA .SBL2
+.SLB0
 	STX $FD8B
 	CLC
-SLB1
-	INX
-	STX $FD87
-	DEX
-SBL2
+.SLB1
+	STY $FD87
+.SBL2
 	STX $FD87
 	ROL
-	STY $FD8B
-	BNE SLB0
-
+	STZ $FD8B
+	BEQ .exit
+	BCS .SLB0
+	BRA .SLB1
+.exit
 	lda _IOdat
 	sta $fd8b
 	ply
 	plx
 	pla
-.exit
 	RTS
+ ENDIF
 ****************
 * INCLUDES
 	include <includes\debug.inc>
@@ -1129,38 +1093,3 @@ size	dc.b 4		; 1K blocks
 pal	STANDARD_PAL
 
 	END
-
- IF 0
-	stz CurrX
-	stz CurrY
-	lda #1
-	jsr SelectBlockA
-	ldx #0
-.l1
-	lda $fcb2
-	jsr PrintHex
-	inx
-	bne .l1
-	lda $fcb2
-	jsr PrintHex
-	lda $fcb2
-	jsr PrintHex
-ELSE
-	stz VBLcount
-	ldx #0
-	ldy #0
-.loop
-	phx
-	phy
-	tya
-	jsr writeFlashByte
-	ply
-	plx
-	iny
-	cpy #0
-	bne .loop
-	sec
-	lda #60
-	sbc VBLcount
-	jsr PrintHex
- ENDIF

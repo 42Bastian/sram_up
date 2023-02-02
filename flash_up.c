@@ -391,9 +391,9 @@ int sendBlock(int blk)
       printf("%02x ",c);
       fflush(stdout);
     }
-  } while( c != 0x42 );
+  } while( c != 0x42 && c != 42);
 
-  return 1;
+  return (c == 0x42);
 }
 
 void getImageCRC()
