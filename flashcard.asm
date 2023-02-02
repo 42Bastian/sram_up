@@ -6,7 +6,7 @@
 *
 ****************
 
-VERSION		equ "03"
+VERSION		equ "04"
 Baudrate	EQU 62500
 ;;->BRKuser	    set 1
 DEBUG		set 1
@@ -349,13 +349,7 @@ writeBlockByte::
 	lda blockAddress+1
 	beq .2
 .1
-	ldx #256/8
-.11
-	REPT 8
-	stz _CARD0
-	ENDR
-	dex
-	bne .11
+	jsr inc256
 	dec
 	bne .1
 .2
@@ -373,7 +367,6 @@ writeBlockByte::
 .4
 	pla
 	sta _CARD1
-
 	ply
 	inc blockAddress
 	beq .8
@@ -395,27 +388,9 @@ set2aaa::
 	lda #5
 	jsr SelectBlockA
 
-	lda #2
-.0
-	ldx #256/8
-.01
-	REPT 8
-	stz _CARD0
-	ENDR
-	dex
-	bne .01
-
-	dec
-	bne .0
-
-	ldx #$aa/5
-.1
-	REPT 5
-	stz _CARD0
-	ENDR
-	dex
-	bne .1
-	rts
+	jsr inc256
+	jsr inc256
+	jmp incAA
 
 ;----------------------------------------
 ; Set $5555
@@ -424,26 +399,10 @@ set5555::
 	lda #10
 	jsr SelectBlockA
 
-	lda #5
-.0
-	ldx #256/8
-.01
-	REPT 8
-	stz _CARD0
-	ENDR
-	dex
-	bne .01
-	dec
-	bne .0
-
-	ldx #$55/5
-.1
 	REPT 5
-	stz _CARD0
+	jsr inc256
 	ENDR
-	dex
-	bne .1
-	rts
+	jmp inc55
 ****************
 * Hello
 ****************
@@ -554,6 +513,9 @@ Read1Block::
 ****************
 * Write1Block  *
 ****************
+* OUT: C = 1 => ok
+*      C = 0 => ko
+
 Write1Block::
 	jsr WaitSerial	; get blocksize in 256byte chunks
 	bcs .99		; got a break
@@ -565,7 +527,7 @@ Write1Block_wf
 	sta BlockCounter
 	jsr InfoLoad			; print info
 	jsr LoadBlock
-	bcs .99
+	bcc .99
 	bra .1
 .0
 	lda #$24
@@ -576,6 +538,7 @@ Write1Block_wf
 	bcs .ok
 	lda $fcb0
 	beq .0
+
 .99
 	lda #42
 	jsr SendSerial
@@ -664,6 +627,9 @@ ReadBlock::
 	rts
 ****************
 *  LoadBlock   *
+* OUT: C = 1 => ok
+*      C = 0 => ko
+
 LoadBlock::
 	sei
 
@@ -721,11 +687,11 @@ LoadBlock::
 .9
 	lda #$41
 	jsr SendSerial			; ok
-	clc
+	sec
 	rts
 
 .99
-	sec
+	clc
 	cli
 	rts
 
@@ -744,7 +710,6 @@ WriteBlock::
 	  tax
 	  lda crctab,x
 	  sta check
-	  sty $fdae
 	  iny
 	bne .1
 	dec temp
@@ -755,7 +720,6 @@ WriteBlock::
 	  tax
 	  lda crctab,x
 	  sta check
-	  sty $fdae
 	  iny
 	bne .2
 	dec temp
@@ -766,7 +730,6 @@ WriteBlock::
 	  tax
 	  lda crctab,x
 	  sta check
-	  sty $fdae
 	  iny
 	bne .3
 	dec temp
@@ -777,11 +740,9 @@ WriteBlock::
 	  tax
 	  lda crctab,x
 	  sta check
-	  sty $fdae
 	  iny
 	bne .4
 .99
-	stz $fdae
 	rts
 ****************
 *  CheckBlock  *
@@ -798,13 +759,11 @@ CheckBlock::
 .1	  lda _CARD0
 	  cmp puffer,y
 	  bne .99
-	  sty $fdae
 	  iny
 	bne .1
 .2	  lda _CARD0
 	  cmp puffer+$100,y
 	  bne .99
-	  sty $fdae
 	  iny
 	bne .2
 
@@ -813,23 +772,19 @@ CheckBlock::
 .3	  lda _CARD0
 	  cmp puffer+$200,y
 	  bne .99
-	  sty $fdae
 	  iny
 	bne .3
 
 .4	  lda _CARD0
 	  cmp puffer+$300,y
 	  bne .99
-	  sty $fdae
 	  iny
 	bne .4
 .98
 	sec
-	stz $fdae
 	rts
 
 .99
-	stz $fdae
 	clc
 	rts
 
@@ -883,7 +838,7 @@ InfoRead::
 InfoLoad::
 	pha
 	SET_XY 0,INFO_Y
-	PRINT "Loading block :   ",,1
+	PRINT "Flashing block :   ",,1
 	SET_XY 110,INFO_Y
 	pla
 	jsr PrintHex
@@ -963,7 +918,6 @@ SendSerial::
 
 WaitSerial::
 	sec
-//->	inc $fda1
 	lda $fcb0	; break it with any key
 	bne .99
 	bit $fd8c
@@ -971,12 +925,10 @@ WaitSerial::
 	lda $fd8d
 	clc
 .99
-//->	stz $fda1
 	rts
 
 WaitSerialDebug::
 	sec
-//->	    inc $fda1
 	lda $fcb0	; break it with any key
 	bne .99
 	bit $fd8c
@@ -988,7 +940,6 @@ WaitSerialDebug::
  ENDIF
 	clc
 .99
-	stz $fda1
 	rts
 ****************
 * InitCRC      *
@@ -1035,36 +986,20 @@ SelectBlockA::
 	lda _IOdat
 	sta $fd8b
 	RTS
- IF 0
-SelectBlock::
-	pha
-	phx
-	phy
-	lda BlockCounter
-	ldx #2
-	ldy #3
-	SEC
-	BRA .SBL2
-.SLB0
-	STX $FD8B
-	CLC
-.SLB1
-	STY $FD87
-.SBL2
-	STX $FD87
-	ROL
-	STZ $FD8B
-	BEQ .exit
-	BCS .SLB0
-	BRA .SLB1
-.exit
-	lda _IOdat
-	sta $fd8b
-	ply
-	plx
-	pla
-	RTS
- ENDIF
+****************
+inc256::
+	REPT 256-$aa
+	stz _CARD0
+	ENDR
+incAA:
+	REPT $aa-$55
+	stz _CARD0
+	ENDR
+inc55:
+	REPT $55
+	stz _CARD0
+	ENDR
+	rts
 ****************
 * INCLUDES
 	include <includes\debug.inc>
