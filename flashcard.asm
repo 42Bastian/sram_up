@@ -6,7 +6,7 @@
 *
 ****************
 
-VERSION		equ "04"
+VERSION		equ "05"
 Baudrate	EQU 62500
 ;;->BRKuser	    set 1
 DEBUG		set 1
@@ -473,6 +473,9 @@ EraseFlash::
 ****************
 ReadPuffer:
 	ldy #0
+	lda size
+	lsr
+	sta temp
 .1
 	lda puffer,y
 	jsr SendSerial
@@ -483,6 +486,9 @@ ReadPuffer:
 	jsr SendSerial
 	iny
 	bne .2
+	dec temp
+	beq .99
+
 .3
 	lda puffer+$200,y
 	jsr SendSerial
@@ -493,6 +499,33 @@ ReadPuffer:
 	jsr SendSerial
 	iny
 	bne .4
+.11
+	lda puffer+$400,y
+	jsr SendSerial
+	iny
+	bne .11
+.21
+	lda puffer+$500,y
+	jsr SendSerial
+	iny
+	bne .21
+	dec temp
+	beq .99
+
+.31
+	lda puffer+$600,y
+	jsr SendSerial
+	iny
+	bne .3
+.41
+	lda puffer+$700,y
+	jsr SendSerial
+	iny
+	bne .41
+	dec temp
+	beq .99
+
+.99
 	rts
 
 ****************
@@ -703,6 +736,7 @@ WriteBlock::
 	stz check
 	stz blockAddress
 	stz blockAddress+1
+
 	ldy #0
 .1	  lda puffer,y
 	  jsr writeBlockByte
@@ -712,8 +746,6 @@ WriteBlock::
 	  sta check
 	  iny
 	bne .1
-	dec temp
-	beq .99
 .2	  lda puffer+$100,y
 	  jsr writeBlockByte
 	  eor check
@@ -722,8 +754,11 @@ WriteBlock::
 	  sta check
 	  iny
 	bne .2
-	dec temp
+
+	lda #2
+	cmp temp
 	beq .99
+
 .3	  lda puffer+$200,y
 	  jsr writeBlockByte
 	  eor check
@@ -732,8 +767,6 @@ WriteBlock::
 	  sta check
 	  iny
 	bne .3
-	dec temp
-	beq .99
 .4	  lda puffer+$300,y
 	  jsr writeBlockByte
 	  eor check
@@ -742,6 +775,43 @@ WriteBlock::
 	  sta check
 	  iny
 	bne .4
+
+	lda #4
+	cmp temp
+	beq .99
+
+.11	  lda puffer+$400,y
+	  jsr writeBlockByte
+	  eor check
+	  tax
+	  lda crctab,x
+	  sta check
+	  iny
+	bne .11
+.21	  lda puffer+$500,y
+	  jsr writeBlockByte
+	  eor check
+	  tax
+	  lda crctab,x
+	  sta check
+	  iny
+	bne .21
+.31	  lda puffer+$600,y
+	  jsr writeBlockByte
+	  eor check
+	  tax
+	  lda crctab,x
+	  sta check
+	  iny
+	bne .31
+.41	  lda puffer+$700,y
+	  jsr writeBlockByte
+	  eor check
+	  tax
+	  lda crctab,x
+	  sta check
+	  iny
+	bne .41
 .99
 	rts
 ****************
@@ -751,9 +821,8 @@ WriteBlock::
 CheckBlock::
 	jsr SelectBlock
 
-	lda size
-	lsr
-	tax
+	ldx size
+
 	clc
 	ldy #0
 .1	  lda _CARD0
@@ -767,19 +836,46 @@ CheckBlock::
 	  iny
 	bne .2
 
-	dex
+	cpx #2
 	beq .98
+
 .3	  lda _CARD0
 	  cmp puffer+$200,y
 	  bne .99
 	  iny
 	bne .3
-
 .4	  lda _CARD0
 	  cmp puffer+$300,y
 	  bne .99
 	  iny
 	bne .4
+
+	cpx #4
+	beq .98
+
+.11	  lda _CARD0
+	  cmp puffer+$400,y
+	  bne .99
+	  iny
+	bne .11
+.21	  lda _CARD0
+	  cmp puffer+$500,y
+	  bne .99
+	  iny
+	bne .21
+
+.31	  lda _CARD0
+	  cmp puffer+$600,y
+	  bne .99
+	  iny
+	bne .31
+
+.41	  lda _CARD0
+	  cmp puffer+$700,y
+	  bne .99
+	  iny
+	bne .41
+
 .98
 	sec
 	rts

@@ -25,7 +25,7 @@ HANDLE hPort = 0;
 unsigned char sectorBuffer[2048];
 unsigned char lynxcrc[256];
 unsigned char imagecrc[256];
-unsigned char buffer[256*2048];
+unsigned char buffer[512*1024];
 unsigned char crctab[256];
 
 void OSerror(char *f,long i);
@@ -458,8 +458,11 @@ int saveImage(const char *s)
       break;
     }
   }
-  size = ( blk == 256 ) ? 512 : 1024;
-  size = 1024;//XXX
+  if ( blocksize != 2048 ){
+    size = ( blk == 256 ) ? 512 : 1024;
+  } else {
+    size = blocksize;
+  }
   printf("Write %dK Image\n",size/4);
 
   if ( (in = fopen(s,"w")) == (FILE *)NULL){
@@ -471,13 +474,13 @@ int saveImage(const char *s)
   header.page_size_bank0 = size;
   header.version = 1;
   fwrite(&header,1,64,in);
-  if ( size == 1024 ){
-    len = fwrite(buffer,1,256*1024,in);
-  } else {
-    for(blk = 0; blk < 256; ++blk){
-      fwrite(buffer+blk*1024,1,512,in);
-    }
-  }
+
+  len = fwrite(buffer,1,256*size,in);
+//->  } else {
+//->    for(blk = 0; blk < 256; ++blk){
+//->      fwrite(buffer+blk*size,1,512,in);
+//->    }
+//->  }
 
   fclose(in);
   return 0;
@@ -498,16 +501,19 @@ int loadImage(const char *s)
   }
   if ( buffer[0] == 'L' && buffer[1] == 'Y' &&
        buffer[2] == 'N' && buffer[3] == 'X'){
-    len = fread(buffer,1,256*1024,in);
+    len = fread(buffer,1,512*1024,in);
   } else {
-    len = fread(buffer+64,1,256*1024-64,in)+64;
+    len = fread(buffer+64,1,512*1024-64,in)+64;
   }
 
   fclose(in);
 
   if ( len == 128*1024 && (buffer[0] != 0xfb || buffer[0x200] == 0x04)){
     blocksize = 512;
+  } else if ( len > 256*1024 ){
+    blocksize = 2048;
   }
+
   printf("Imagelength %d/Blocksize %d\n",len,blocksize);
   return 0;
 }
